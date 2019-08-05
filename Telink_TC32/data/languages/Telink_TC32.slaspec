@@ -7,19 +7,19 @@
 # Memory architecture
 define endian=little;
 define alignment=2;  # TODO: Verify. See 4.2 "Alignment Definition."
-define space RAM type=ram_space size=2 default;
-define space register type=register_space size=2;
+define space RAM type=ram_space size=4 default;
+define space register type=register_space size=4;
 
 
 # Registers
-define register offset=0x0000 size=2 [
+define register offset=0x0000 size=4 [
   r0 r1 r2 r3 r4 r5 r6 r7 r8 r9 r10 r11 r12 sp lr pc
   # TODO: Status registers?
 ];
 
-define register offset=0x1000 size=4 [
-  flags # FIXME why must be 32-bits?
-];
+define register offset=0x0040 size=1 [ NG ZR CY OV tmpNG tmpZR tmpCY tmpOV shift_carry TB Q GE1 GE2 GE3 GE4 ]; 
+define register offset=0x0050 size=4 [ cpsr spsr ];
+define register offset=0x0060 size=4 [ mult_addr ];	# Special internal register for dealing with multiple stores/loads
 
 
 # Map of fields within the instruction that we will use during instruction
@@ -71,7 +71,83 @@ define token instr(16)
   # Displacements from $pc for the tj instruction
   displacement_0_11 = (0, 10) signed
   displacement_0_8 = (0, 7) signed
+  
+  thc0002=(0,2)
+  thc0003=(0,3)
+  thc0004=(0,4)
+  thc0007=(0,7)
+  thc0011=(0,11)
+  thc0107=(1,7)
+  thc0207=(2,7)
+  thc0307=(3,7)
+  thc0407=(4,7)
+  thc0405=(4,5)
+  thc0409=(4,9)
+  thc0506=(5,6)
+  thc0507=(5,7)
+  thc0607=(6,7)
+  thc0810=(8,10)
+  thc0811=(8,11)
+  thc0910=(9,10)
+  thc0808=(8,8)
+  thc0707=(7,7)
+  thc0606=(6,6)
+  thc0505=(5,5)
+  thc0404=(4,4)
+  thc0303=(3,3)
+  thc0202=(2,2)
+  thc0101=(1,1)
+  thc0000=(0,0)
+ 
 ;
+
+read_list_base: r0  		        is thc0000=1 & r0 & thc0107=0			    { r0 = *mult_addr; mult_addr = mult_addr + 4; }
+read_list_base: r0^","		        is thc0000=1 & r0				            { r0 = * mult_addr; mult_addr = mult_addr + 4; }
+read_list_base:			            is thc0000=0					            { }
+read_list7: read_list_base r1  	    is thc0101=1 & read_list_base & r1 & thc0207=0	{ r1 = * mult_addr; mult_addr = mult_addr + 4; }
+read_list7: read_list_base r1^","	is thc0101=1 & read_list_base & r1			    { r1 = * mult_addr; mult_addr = mult_addr + 4; }
+read_list7: read_list_base  	    is thc0101=0 & read_list_base			        { }
+read_list6: read_list7 r2  	        is thc0202=1 & read_list7 & r2 & thc0307=0	{ r2 = * mult_addr; mult_addr = mult_addr + 4; }
+read_list6: read_list7 r2^","	    is thc0202=1 & read_list7 & r2   		    { r2 = * mult_addr; mult_addr = mult_addr + 4; }
+read_list6: read_list7  	        is thc0202=0 & read_list7			        { }
+read_list5: read_list6 r3  	        is thc0303=1 & read_list6 & r3 & thc0407=0	{ r3 = * mult_addr; mult_addr = mult_addr + 4; }
+read_list5: read_list6 r3^","	    is thc0303=1 & read_list6 & r3			    { r3 = * mult_addr; mult_addr = mult_addr + 4; }
+read_list5: read_list6  	        is thc0303=0 & read_list6			        { }
+read_list4: read_list5 r4  	        is thc0404=1 & read_list5 & r4 & thc0507=0	{ r4 = * mult_addr; mult_addr = mult_addr + 4; }
+read_list4: read_list5 r4^","	    is thc0404=1 & read_list5 & r4   		    { r4 = * mult_addr; mult_addr = mult_addr + 4; }
+read_list4: read_list5		        is thc0404=0 & read_list5			        { }
+read_list3: read_list4 r5  	        is thc0505=1 & read_list4 & r5 & thc0607=0	{ r5 = * mult_addr; mult_addr = mult_addr + 4; }
+read_list3: read_list4 r5^","	    is thc0505=1 & read_list4 & r5   		    { r5 = * mult_addr; mult_addr = mult_addr + 4; }
+read_list3: read_list4  	        is thc0505=0 & read_list4			        { }
+read_list2: read_list3 r6  	        is thc0606=1 & read_list3 & r6 & thc0707=0	{ r6 = * mult_addr; mult_addr = mult_addr + 4; }
+read_list2: read_list3 r6^","	    is thc0606=1 & read_list3 & r6			    { r6 = * mult_addr; mult_addr = mult_addr + 4; }
+read_list2: read_list3  		    is thc0606=0 & read_list3			        { }
+read_list1: read_list2 r7		    is thc0707=1 & read_list2 & r7 { r7 = * mult_addr; mult_addr = mult_addr + 4; }
+read_list1: read_list2  		    is thc0707=0 & read_list2		    		{ }
+
+write_list1: r7   		        is thc0707=1 & r7 { * mult_addr=r7; mult_addr = mult_addr - 4; }
+write_list1:                    is thc0707=0 				    { }
+write_list2: r6               	is thc0606=1 & write_list1 & r6 & thc0707=0	{ * mult_addr=r6; mult_addr = mult_addr - 4; }
+write_list2: r6^"," write_list1 is thc0606=1 & write_list1 & r6             { * mult_addr=r6; mult_addr = mult_addr - 4; }
+write_list2: write_list1  		is thc0606=0 & write_list1				    { }
+write_list3: r5               	is thc0505=1 & write_list2 & r5 & thc0607=0	{ * mult_addr=r5; mult_addr = mult_addr - 4; }
+write_list3: r5^"," write_list2 is thc0505=1 & write_list2 & r5             { * mult_addr=r5; mult_addr = mult_addr - 4; }
+write_list3: write_list2  		is thc0505=0 & write_list2				    { }
+write_list4: r4                 is thc0404=1 & write_list3 & r4 & thc0507=0	{ * mult_addr=r4; mult_addr = mult_addr - 4; }
+write_list4: r4^"," write_list3 is thc0404=1 & write_list3 & r4             { * mult_addr=r4; mult_addr = mult_addr - 4; }
+write_list4: write_list3  		is thc0404=0 & write_list3				    { }
+write_list5: r3                 is thc0303=1 & write_list4 & r3 & thc0407=0	{ * mult_addr=r3; mult_addr = mult_addr - 4; }
+write_list5: r3^"," write_list4 is thc0303=1 & write_list4 & r3             { * mult_addr=r3; mult_addr = mult_addr - 4; }
+write_list5: write_list4  		is thc0303=0 & write_list4				    { }
+write_list6: r2                 is thc0202=1 & write_list5 & r2 & thc0407=0	{ * mult_addr=r2; mult_addr = mult_addr - 4; }
+write_list6: r2^"," write_list5 is thc0202=1 & write_list5 & r2             { * mult_addr=r2; mult_addr = mult_addr - 4; }
+write_list6: write_list5  		is thc0202=0 & write_list5				    { }
+write_list7: r1                 is thc0101=1 & write_list6 & r1 & thc0207=0	{ * mult_addr=r1; mult_addr = mult_addr - 4; }
+write_list7: r1^"," write_list6 is thc0101=1 & write_list6 & r1             { * mult_addr=r1; mult_addr = mult_addr - 4; }
+write_list7: write_list6  		is thc0101=0 & write_list6				    { }
+write_list_base: r0             is thc0000=1 & write_list7 & r0 & thc0107=0	{ * mult_addr=r0; mult_addr = mult_addr - 4; }
+write_list_base: r0^"," write_list7 is thc0000=1 & write_list7 & r0             { * mult_addr=r0; mult_addr = mult_addr - 4; }
+write_list_base: write_list7        is thc0000=0 & write_list7 				        { }
 
 
 # Immediates that are multiplied by a constant
@@ -211,7 +287,7 @@ attach names
 }
 
 # tloadm%c %8-10r!, %M
-:tloadm reg_8_3!, {} is op_11_5=0x001b & reg_8_3
+:tloadm reg_8_3!, { read_list1 } is op_11_5=0x001b & reg_8_3 & read_list1
 {
 }
 
@@ -316,17 +392,27 @@ attach names
 }
 
 # tpop%c %O
-:tpop {pc} is op_9_7=0x0036 & pc
+:tpop { read_list1, pc} is op_9_7=0x0036 & thc0808 = 1 & pc & read_list1
+{
+}
+
+# tpop%c %O
+:tpop { read_list1 } is op_9_7=0x0036 & thc0808 = 0 & read_list1
 {
 }
 
 # tpush%c %N
-:tpush {lr} is op_9_7=0x0032 & lr
+:tpush { write_list_base, lr} is op_9_7=0x0032 & thc0808 = 1 & lr & write_list_base
+{
+}
+
+ # tpush%c %N
+:tpush { write_list_base} is op_9_7=0x0032 & thc0808 = 0 & write_list_base
 {
 }
 
 # treti %O
-:treti {pc} is op_9_7=0x0034 & pc
+:treti {read_list1, pc} is op_9_7=0x0034 & pc & read_list1
 {
 }
 
@@ -361,7 +447,7 @@ attach names
 }
 
 # tstorem%c %8-10r!, %M
-:tstorem reg_8_3!, {} is op_11_5=0x001a & reg_8_3
+:tstorem reg_8_3!, { write_list_base } is op_11_5=0x001a & reg_8_3 & write_list_base
 {
 }
 

@@ -196,12 +196,12 @@ attach names
 }
 
 # tj%8-11c.n %0-7B%X
-:tj^cond_imm_8_4".n" displacement_0_8 is op_12_4=0x000c & cond_imm_8_4 & displacement_0_8
+:tj^cond_imm_8_4".n" tjcond_disp is op_12_4=0x000c & cond_imm_8_4 & displacement_0_8 [ tjcond_disp = inst_next + 2 + displacement_0_8*2; ]
 {
 }
 
 # tj%c.n %0-10B%x
-:tj".n" displacement_0_11 is op_11_5=0x0010 & displacement_0_11
+:tj".n" tj_disp is op_11_5=0x0010 & displacement_0_11 [ tj_disp = inst_next + 2 + displacement_0_11*2; ]
 {
 }
 

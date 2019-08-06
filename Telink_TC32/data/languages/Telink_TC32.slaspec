@@ -100,6 +100,10 @@ define token instr(16)
   thc0000=(0,0)
  
 ;
+define token long_instr(16)
+  long_disp_0_11 = (0, 10)
+;
+    
 
 read_list_base: r0  		        is thc0000=1 & r0 & thc0107=0			    { r0 = *mult_addr; mult_addr = mult_addr + 4; }
 read_list_base: r0^","		        is thc0000=1 & r0				            { r0 = * mult_addr; mult_addr = mult_addr + 4; }
@@ -280,6 +284,12 @@ attach names
 :tj".n" tj_disp is op_11_5=0x0010 & displacement_0_11 [ tj_disp = inst_next + 2 + displacement_0_11*2; ]
 {
 }
+
+# tjl%c\\t%1%x'
+:tjl tj_disp is op_11_5=0x0012 & displacement_0_11; long_disp_0_11 [ tj_disp = inst_next + (displacement_0_11 << 12) + 2 * long_disp_0_11; ]
+{
+}
+
 
 # tjex%c %S%x
 :tjex hi_reg_6_1_and_3_3 is op_7_9=0x000e & hi_reg_6_1_and_3_3

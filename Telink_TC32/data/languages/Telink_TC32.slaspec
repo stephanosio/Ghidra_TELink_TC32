@@ -432,11 +432,17 @@ attach names
     call [target];    
 }
 
-
 # tjex%c %S%x
-:tjex hi_reg_6_1_and_3_3 is op_7_9=0x000e & hi_reg_6_1_and_3_3
+:tjex hi_reg_6_1_and_3_3 is op_7_9=0x000e & hi_reg_6_1_and_3_3 & hi_reg_lower_3_3=0b110 & hi_reg_upper_6_1=1
 {
     return [hi_reg_6_1_and_3_3];
+}
+
+
+# tjex%c %S%x
+:tjex hi_reg_6_1_and_3_3 is op_7_9=0x000e & hi_reg_6_1_and_3_3 
+{
+    call [hi_reg_6_1_and_3_3];
 }
 
 # tloadm%c %8-10r!, %M

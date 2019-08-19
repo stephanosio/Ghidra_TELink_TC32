@@ -570,7 +570,10 @@ attach names
 # tnand%c %0-2r, %3-5r
 :tnand reg_0_3, reg_3_3 is op_6_10=0x0008 & reg_0_3 & reg_3_3
 {
-    reg_0_3 = ~(reg_0_3 & reg_3_3);
+    tmp = reg_0_3 & reg_3_3;
+    resflags(tmp);
+    th_affectflags();
+    # reg_0_3 = ~(reg_0_3 & reg_3_3);
 }
 
 # tneg%C %0-2r, %3-5r
@@ -747,6 +750,7 @@ attach names
     th_subflags(reg_3_3,imm_6_3);
     reg_0_3 = reg_3_3 - imm_6_3;
     resflags(reg_0_3);
+    th_affectflags();
 }
 
 # tsub%C %0-2r, %3-5r, %6-8r

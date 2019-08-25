@@ -533,6 +533,13 @@ attach names
     hi_reg_7_1_and_0_3 = hi_reg_6_1_and_3_3:4;
 }
 
+# tmov%c %D, %S
+:tmov pc, hi_reg_6_1_and_3_3 is op_8_8=0x0006 & hi_reg_lower_0_3 = 0b111 & hi_reg_upper_7_1 = 1 & hi_reg_6_1_and_3_3 & hi_reg_7_1_and_0_3 & pc
+{
+    pc = hi_reg_6_1_and_3_3:4;
+    goto [pc];
+}
+
 # tmovn%C %0-2r, %3-5r
 :tmovns reg_0_3, reg_3_3 is op_6_10=0x000f & reg_0_3 & reg_3_3
 {

@@ -1,25 +1,42 @@
 #
 # Telink TC32
 #
-# Telink microcontroller 16-bit CPU
+# Telink Microcontroller 32-bit CPU
+#
 
-
+#
 # Memory architecture
+#
+
 define endian=little;
-define alignment=2;  # TODO: Verify. See 4.2 "Alignment Definition."
-define space RAM type=ram_space size=4 default;
+define alignment=2;
+
+define space ram type=ram_space size=4 default;
 define space register type=register_space size=4;
 
-
+#
 # Registers
-define register offset=0x0000 size=4 [
-  r0 r1 r2 r3 r4 r5 r6 r7 r8 r9 sl fp ip sp lr pc
-  # TODO: Status registers?
-];
+#
 
-define register offset=0x0040 size=1 [ NG ZR CY OV tmpNG tmpZR tmpCY tmpOV shift_carry TB Q GE1 GE2 GE3 GE4 ]; 
-define register offset=0x0050 size=4 [ cpsr spsr ];
-define register offset=0x0060 size=4 [ mult_addr ];	# Special internal register for dealing with multiple stores/loads
+define register offset=0x0020 size=4 [ r0 r1 r2 r3 r4 r5 r6 r7 r8 r9 r10 r11 r12 sp lr pc ];
+define register offset=0x0060 size=1 [ NG ZR CY OV tmpNG tmpZR tmpCY tmpOV shift_carry TB Q GE1 GE2 GE3 GE4 ];
+define register offset=0x0070 size=4 [ cpsr spsr ];
+define register offset=0x0080 size=4 [ mult_addr ];	# Special internal register for dealing with multiple stores/loads
+define register offset=0x0084 size=4 [ lr_svc sp_svc spsr_svc ];
+
+#
+# Context Bits
+#
+
+define register offset=0x00 size=8 contextreg;
+
+define context contextreg
+    lr_set          = (1,1) noflow  # 1 if the instruction right before was a mov lr,pc
+;
+
+#
+# Macros
+#
 
 macro th_addflags(op1,op2) {
   tmpCY = carry(op1,op2);
@@ -31,6 +48,7 @@ macro th_subflags(op1,op2) {
   tmpCY = op2 <= op1;
   tmpOV = sborrow(op1,op2);
 }
+
 macro th_subflags0(op2) {
   tmpCY = op2 == 0;
   tmpOV = sborrow(0,op2);
@@ -55,15 +73,18 @@ macro th_affectflags() {
   CY = tmpCY; ZR = tmpZR; NG = tmpNG; OV = tmpOV;
 }
 
-define pcodeop setExecutionMode; # SVC, IRQ mode etc
-define pcodeop getExecutionMode;
-define pcodeop setState; # Unsure what exactly this state contains
-define pcodeop getState; 
+define pcodeop setCurrentProcessorState;
+define pcodeop getCurrentProcessorState;
+define pcodeop setSavedProcessorState;
+define pcodeop getSavedProcessorState;
 
+#
 # Map of fields within the instruction that we will use during instruction
 # decoding.
 #
 # Field names follow a *_<offset>_<numbits> convention.
+#
+
 define token instr(16)
   # These are derived from the masks and values used by tc32-elf-objdump.exe
   # to identify instructions
@@ -136,12 +157,11 @@ define token instr(16)
   thc0202=(2,2)
   thc0101=(1,1)
   thc0000=(0,0)
- 
 ;
+
 define token long_instr(16)
   long_disp_0_11 = (0, 10)
 ;
-    
 
 read_list_base: r0  		        is thc0000=1 & r0 & thc0107=0			    { r0 = *mult_addr; mult_addr = mult_addr + 4; }
 read_list_base: r0^","		        is thc0000=1 & r0				            { r0 = * mult_addr; mult_addr = mult_addr + 4; }
@@ -215,7 +235,6 @@ write_list_inc_base: r0             is thc0000=1 & write_list_inc7 & r0 & thc010
 write_list_inc_base: r0^"," write_list_inc7 is thc0000=1 & write_list_inc7 & r0             { * mult_addr=r0; mult_addr = mult_addr + 4; }
 write_list_inc_base: write_list_inc7        is thc0000=0 & write_list_inc7 				        { }
 
-
 # Immediates that are multiplied by a constant
 imm_0_7_x4: value is imm_0_7 [ value = imm_0_7 * 4; ] { tmp = imm_0_7:4 * 4; export tmp; }
 imm_0_8_x4: value is imm_0_8 [ value = imm_0_8 * 4; ] { tmp = imm_0_8:4 * 4; export tmp; }
@@ -253,7 +272,7 @@ thcc: "lt"	is cond_imm_8_4=11	{ tmp:1 = (NG != OV); export tmp; }
 thcc: "gt"	is cond_imm_8_4=12	{ tmp:1 = !ZR && (NG == OV); export tmp; }
 thcc: "le"	is cond_imm_8_4=13	{ tmp:1 = ZR || (NG != OV); export tmp; }
 
-
+#
 # Map operands that encode register numbers to the actual registers.
 #
 # However, note that some instructions (those using %D or %S in objdump) split
@@ -261,15 +280,17 @@ thcc: "le"	is cond_imm_8_4=13	{ tmp:1 = ZR || (NG != OV); export tmp; }
 # one, we use the lower bits to map to a different set of registers.
 #
 # See 6.3.1 "Attaching Registers."
+#
+
 attach variables
   [ reg_0_3 reg_3_3 reg_6_3 reg_8_3 ]
   [ r0 r1 r2 r3 r4 r5 r6 r7 ]
 ;
+
 attach variables
   [ hi_reg_lower_0_3 hi_reg_lower_3_3 ]
-  [ r8 r9 sl fp ip sp lr pc  ]
+  [ r8 r9 r10 r11 r12 sp lr pc  ]
 ;
-
 
 # "Hi" registers
 hi_reg_6_1_and_3_3: hi_reg_lower_3_3 is hi_reg_upper_6_1 = 1 & hi_reg_lower_3_3 { export hi_reg_lower_3_3;  }
@@ -283,7 +304,6 @@ attach names
   [ cond_imm_8_4 ]
   [ eq ne cs cc mi pl vs vc hi ls ge lt gt le al _ ]
 ;
-
 
 # tadd%C %0-2r, %3-5r, #%6-8d
 :tadds reg_0_3, reg_3_3, #imm_6_3 is op_9_7=0x0076 & reg_0_3 & reg_3_3 & imm_6_3
@@ -412,14 +432,14 @@ attach names
     # Not used
 }
 
-# tj%8-11c.n %0-7B%X
-:tj^thcc^".n" Addr8 is op_12_4=0x000c & thcc & Addr8
+# tj%8-11c %0-7B%X
+:tj^thcc^ Addr8 is op_12_4=0x000c & thcc & Addr8
 {
     if (thcc) goto Addr8;
 }
 
-# tj%c.n %0-10B%x
-:tj".n" Addr11 is op_11_5=0x0010 & Addr11 
+# tj%c %0-10B%x
+:tj Addr11 is op_11_5=0x0010 & Addr11 
 {
     goto Addr11;
 }
@@ -437,7 +457,6 @@ attach names
 {
     return [hi_reg_6_1_and_3_3];
 }
-
 
 # tjex%c %S%x
 :tjex hi_reg_6_1_and_3_3 is op_7_9=0x000e & hi_reg_6_1_and_3_3 
@@ -516,7 +535,7 @@ attach names
 # tmcsr%c %0-2r
 :tmcsr reg_0_3 is op_3_13=0x0d78 & reg_0_3
 {
-    setExecutionMode(reg_0_3);
+    setCurrentProcessorState(reg_0_3);
 }
 
 # tmov%C %8-10r, #%0-7d
@@ -551,19 +570,19 @@ attach names
 # tmrcs%c %0-2r
 :tmrcs reg_0_3 is op_3_13=0x0d79 & reg_0_3
 {
-    getExecutionMode(reg_0_3);
+    getCurrentProcessorState(reg_0_3);
 }
 
 # tmrss%c %0-2r
 :tmrss reg_0_3 is op_3_13=0x0d7b & reg_0_3
 {
-    getState(reg_0_3);
+    getSavedProcessorState(reg_0_3);
 }
 
 # tmssr%c %0-2r
 :tmssr reg_0_3 is op_3_13=0x0d7a & reg_0_3
 {
-    setState(reg_0_3);
+    setSavedProcessorState(reg_0_3);
 }
 
 # tmul%C %0-2r, %3-5r
@@ -605,7 +624,7 @@ attach names
 }
 
 # tpop%c %O
-:tpop { read_list1, pc} is op_9_7=0x0036 & thc0808 = 1 & pc & read_list1
+:tpop { read_list1, pc } is op_9_7=0x0036 & thc0808 = 1 & pc & read_list1
 {
     mult_addr = sp;
     build read_list1;
@@ -623,7 +642,7 @@ attach names
 }
 
 # %c %N
-:tpush { write_list_base, lr} is op_9_7=0x0032 & thc0808 = 1 & lr & write_list_base
+:tpush { write_list_base, lr } is op_9_7=0x0032 & thc0808 = 1 & lr & write_list_base
 {
     mult_addr = sp-4;
     build write_list_base;
@@ -632,7 +651,7 @@ attach names
 }
 
  # tpush%c %N
-:tpush { write_list_base} is op_9_7=0x0032 & thc0808 = 0 & write_list_base
+:tpush { write_list_base } is op_9_7=0x0032 & thc0808 = 0 & write_list_base
 {
     mult_addr = sp-4;
     build write_list_base;    
@@ -640,7 +659,7 @@ attach names
 }
 
 # treti %O
-:treti {read_list1, pc} is op_9_7=0x0034 & pc & read_list1
+:treti { read_list1, pc } is op_9_7=0x0034 & pc & read_list1
 {
     mult_addr = sp;
     build read_list1;
@@ -649,9 +668,14 @@ attach names
     return [pc];
 }
 
-# trotr%C %0-2r, %3-5r - unused
+# trotr%C %0-2r, %3-5r
 :trotrs reg_0_3, reg_3_3 is op_6_10=0x0007 & reg_0_3 & reg_3_3
 {
+    local tmp = reg_3_3 - 1;
+    grabbit(reg_0_3, tmp);
+    reg_0_3 = (reg_0_3 >> reg_3_3) | (reg_0_3 << (32 - reg_3_3));
+    resflags(reg_0_3);
+    th_affectflags();
 }
 
 # tserv%c %0-7d - unused
@@ -662,7 +686,6 @@ attach names
 # tshftl%C %0-2r, %3-5r
 :tshftls reg_0_3, reg_3_3 is op_6_10=0x0002 & reg_0_3 & reg_3_3
 {
-    
     local tmp = 32 - reg_3_3;
     grabbit(reg_0_3,tmp);
     reg_0_3 = reg_0_3 << reg_3_3;
@@ -683,22 +706,21 @@ attach names
 # tshftr%C %0-2r, %3-5r
 :tshftrs reg_0_3, reg_3_3 is op_6_10=0x0003 & reg_0_3 & reg_3_3
 {
-  local tmp = reg_3_3 - 1;
-  grabbit(reg_0_3,tmp);
-  reg_0_3 = reg_0_3 >> reg_3_3;
-  resflags(reg_0_3);
-  th_affectflags();
+    local tmp = reg_3_3 - 1;
+    grabbit(reg_0_3,tmp);
+    reg_0_3 = reg_0_3 >> reg_3_3;
+    resflags(reg_0_3);
+    th_affectflags();
 }
 
 # tshftr%C %0-2r, %3-5r, %s
 :tshftrs reg_0_3, reg_3_3, right_shift_imm_6_5 is op_11_5=0x001f & reg_0_3 & reg_3_3 & right_shift_imm_6_5
 {
-  local tmp = right_shift_imm_6_5 - 1;
-  grabbit(reg_3_3,tmp);
-  reg_0_3 = reg_3_3 >> right_shift_imm_6_5;
-  resflags(reg_0_3);
-  th_affectflags();
-    
+    local tmp = right_shift_imm_6_5 - 1;
+    grabbit(reg_3_3,tmp);
+    reg_0_3 = reg_3_3 >> right_shift_imm_6_5;
+    resflags(reg_0_3);
+    th_affectflags();
 }
 
 # tstorem%c %8-10r!, %M
